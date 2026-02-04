@@ -1,37 +1,70 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Bikini Maker Simulator</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>3D Bikini Simulator</title>
 
 <style>
-body {
+html, body {
   margin: 0;
+  padding: 0;
   overflow: hidden;
-  font-family: system-ui, -apple-system;
-  background: #f2f2f2;
+  background: #111;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 #ui {
   position: fixed;
   bottom: 0;
-  width: 100%;
-  background: rgba(255,255,255,0.96);
+  left: 0;
+  right: 0;
+  background: rgba(0,0,0,0.8);
   padding: 10px;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
+  color: #fff;
+  font-size: 12px;
+  transition: transform 0.25s ease;
+}
+
+#ui.hidden {
+  transform: translateY(100%);
 }
 
 label {
-  font-size: 13px;
+  display: flex;
+  flex-direction: column;
 }
 
-input, select {
+input[type=range], select {
   width: 100%;
-  font-size: 16px;
-  padding: 5px;
+}
+
+button {
+  padding: 8px;
+  background: #444;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+}
+
+#closeUI {
+  grid-column: span 2;
+  background: #222;
+}
+
+#openUI {
+  position: fixed;
+  bottom: 15px;
+  right: 15px;
+  padding: 10px 14px;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  border-radius: 20px;
+  border: none;
+  display: none;
 }
 </style>
 </head>
@@ -39,183 +72,175 @@ input, select {
 <body>
 
 <div id="ui">
-  <label>
-    <input type="checkbox" id="perfMode"> Performance Mode
+  <label>Chest
+    <input id="chest" type="range" min="0.9" max="1.2" step="0.01" value="1">
+  </label>
+  <label>Hips
+    <input id="hips" type="range" min="0.9" max="1.25" step="0.01" value="1">
+  </label>
+  <label>Waist
+    <input id="waist" type="range" min="0.85" max="1.1" step="0.01" value="1">
+  </label>
+  <label>Shoulders
+    <input id="shoulders" type="range" min="0.9" max="1.15" step="0.01" value="1">
   </label>
 
-  <label>
-    <input type="checkbox" id="jiggleToggle"> Secondary Motion
+  <label>Skin
+    <select id="skin">
+      <option value="dry">Dry</option>
+      <option value="smooth">Smooth</option>
+      <option value="oily">Oily</option>
+      <option value="wet">Wet</option>
+    </select>
   </label>
 
-  <label>Skin Texture</label>
-  <select id="skinType">
-    <option value="dry">Dry</option>
-    <option value="oily">Oily</option>
-    <option value="glossy">Glossy</option>
-    <option value="wet">Wet</option>
-    <option value="rough">Rough</option>
-    <option value="smooth">Smooth</option>
-  </select>
+  <label>Performance
+    <select id="perf">
+      <option value="high">High</option>
+      <option value="low">Low</option>
+    </select>
+  </label>
 
-  <label>Chest</label>
-  <input type="range" id="chest" min="0.9" max="1.2" step="0.01" value="1">
-
-  <label>Waist</label>
-  <input type="range" id="waist" min="0.85" max="1.1" step="0.01" value="1">
-
-  <label>Hips</label>
-  <input type="range" id="hips" min="0.9" max="1.25" step="0.01" value="1">
-
-  <label>Shoulders</label>
-  <input type="range" id="shoulders" min="0.9" max="1.15" step="0.01" value="1">
+  <button id="reset">Reset View</button>
+  <button id="closeUI">Close Customization</button>
 </div>
 
+<button id="openUI">Customize</button>
+
 <script src="https://cdn.jsdelivr.net/npm/three@0.158/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158/examples/js/loaders/GLTFLoader.js"></script>
 
 <script>
-/* ---------- SCENE ---------- */
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xf2f2f2);
+let scene, camera, renderer, model;
+let isDragging = false;
+let lastX = 0;
+let rotationVelocity = 0;
 
-const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
-camera.position.set(0, 1.6, 3);
-
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(devicePixelRatio);
-document.body.appendChild(renderer.domElement);
-
-scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.2));
-
-/* ---------- MODEL (PLACEHOLDER MANNEQUIN) ---------- */
-const skinMaterial = new THREE.MeshStandardMaterial({
-  color: 0xffd1b3,
-  roughness: 0.6,
-  metalness: 0
-});
-
-const body = new THREE.Group();
-scene.add(body);
-
-// Simple mannequin parts (low-end friendly)
-function part(y, sx, sy, sz) {
-  const m = new THREE.Mesh(
-    new THREE.SphereGeometry(0.25, 24, 24),
-    skinMaterial
-  );
-  m.position.y = y;
-  m.scale.set(sx, sy, sz);
-  body.add(m);
-  return m;
-}
-
-const chest = part(1.4, 1, 0.9, 1);
-const waist = part(1.1, 0.9, 0.7, 0.9);
-const hips = part(0.8, 1, 0.8, 1);
-const shoulders = part(1.6, 1.1, 0.4, 1.1);
-
-/* ---------- BODY SLIDERS ---------- */
-const parts = { chest, waist, hips, shoulders };
-
-Object.keys(parts).forEach(p => {
-  document.getElementById(p).addEventListener("input", e => {
-    parts[p].scale.x = e.target.value;
-    parts[p].scale.z = e.target.value;
-  });
-});
-
-/* ---------- SKIN PRESETS ---------- */
-document.getElementById("skinType").addEventListener("change", e => {
-  const s = e.target.value;
-  const map = {
-    dry: { r: 0.85, m: 0 },
-    oily: { r: 0.45, m: 0.1 },
-    glossy: { r: 0.2, m: 0.15 },
-    wet: { r: 0.08, m: 0.25 },
-    rough: { r: 0.95, m: 0 },
-    smooth: { r: 0.3, m: 0.05 }
-  };
-  skinMaterial.roughness = map[s].r;
-  skinMaterial.metalness = map[s].m;
-});
-
-/* ---------- JIGGLE PHYSICS ---------- */
-const jiggle = {
-  enabled: false,
-  strength: 0.06,
-  damping: 0.88,
-  velocity: 0
+const bodyGroups = {
+  chest: [],
+  waist: [],
+  hips: [],
+  shoulders: []
 };
 
-let isRotating = false;
-let rotationVelocity = 0;
-let prevX = 0;
+init();
+animate();
 
-document.getElementById("jiggleToggle").addEventListener("change", e => {
-  jiggle.enabled = e.target.checked && !perfMode.checked;
-});
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x111111);
 
-/* ---------- TOUCH ROTATION ---------- */
-renderer.domElement.addEventListener("touchstart", e => {
-  isRotating = true;
-  prevX = e.touches[0].clientX;
-});
+  camera = new THREE.PerspectiveCamera(35, window.innerWidth/window.innerHeight, 0.1, 100);
+  camera.position.set(0, 1.5, 3);
 
-renderer.domElement.addEventListener("touchmove", e => {
-  if (!isRotating) return;
-  const x = e.touches[0].clientX;
-  const delta = x - prevX;
-  body.rotation.y += delta * 0.005;
-  rotationVelocity = delta * 0.01;
-  prevX = x;
-});
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  document.body.appendChild(renderer.domElement);
 
-renderer.domElement.addEventListener("touchend", () => {
-  isRotating = false;
-});
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1));
 
-/* ---------- PERFORMANCE MODE ---------- */
-const perfMode = document.getElementById("perfMode");
+  const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+  dir.position.set(2, 3, 4);
+  scene.add(dir);
 
-perfMode.addEventListener("change", () => {
-  const low = perfMode.checked;
-  renderer.setPixelRatio(low ? 1 : devicePixelRatio);
-  skinMaterial.flatShading = low;
-  skinMaterial.needsUpdate = true;
+  const loader = new THREE.GLTFLoader();
+  loader.load("female.glb", gltf => {
+    model = gltf.scene;
+    model.position.y = -1;
+    scene.add(model);
 
-  if (low) {
-    jiggle.enabled = false;
-    document.getElementById("jiggleToggle").checked = false;
-  }
-});
+    model.traverse(obj => {
+      if (obj.isMesh) {
+        obj.material.roughness = 0.4;
+        obj.material.metalness = 0.05;
 
-if (navigator.deviceMemory && navigator.deviceMemory <= 3) {
-  perfMode.checked = true;
-  perfMode.dispatchEvent(new Event("change"));
+        const n = obj.name.toLowerCase();
+        if (n.includes("chest") || n.includes("bust")) bodyGroups.chest.push(obj);
+        if (n.includes("waist") || n.includes("abdomen")) bodyGroups.waist.push(obj);
+        if (n.includes("hip") || n.includes("pelvis")) bodyGroups.hips.push(obj);
+        if (n.includes("shoulder") || n.includes("clavicle")) bodyGroups.shoulders.push(obj);
+      }
+    });
+  });
+
+  window.addEventListener("resize", onResize);
+
+  renderer.domElement.addEventListener("pointerdown", e => {
+    isDragging = true;
+    lastX = e.clientX;
+  });
+
+  window.addEventListener("pointerup", () => isDragging = false);
+
+  window.addEventListener("pointermove", e => {
+    if (!isDragging || !model) return;
+    const dx = e.clientX - lastX;
+    lastX = e.clientX;
+    rotationVelocity = dx * 0.002;
+    model.rotation.y += rotationVelocity;
+  });
+
+  setupUI();
 }
 
-/* ---------- LOOP ---------- */
-let last = performance.now();
-function animate(t) {
+function setupUI() {
+  ["chest","waist","hips","shoulders"].forEach(part => {
+    document.getElementById(part).oninput = e => {
+      bodyGroups[part].forEach(m => {
+        m.scale.x = e.target.value;
+        m.scale.z = e.target.value;
+      });
+    };
+  });
+
+  document.getElementById("skin").onchange = e => {
+    if (!model) return;
+    model.traverse(obj => {
+      if (!obj.isMesh) return;
+      obj.material.roughness =
+        e.target.value === "dry" ? 0.6 :
+        e.target.value === "smooth" ? 0.4 :
+        e.target.value === "oily" ? 0.25 : 0.15;
+    });
+  };
+
+  document.getElementById("perf").onchange = e => {
+    renderer.setPixelRatio(e.target.value === "low" ? 1 : window.devicePixelRatio);
+  };
+
+  document.getElementById("reset").onclick = () => {
+    if (model) model.rotation.y = 0;
+  };
+
+  const ui = document.getElementById("ui");
+  const openBtn = document.getElementById("openUI");
+
+  document.getElementById("closeUI").onclick = () => {
+    ui.classList.add("hidden");
+    openBtn.style.display = "block";
+  };
+
+  openBtn.onclick = () => {
+    ui.classList.remove("hidden");
+    openBtn.style.display = "none";
+  };
+}
+
+function animate() {
   requestAnimationFrame(animate);
-  const dt = Math.min((t - last) / 1000, 0.033);
-  last = t;
-
-  if (jiggle.enabled && isRotating) {
-    jiggle.velocity += rotationVelocity * jiggle.strength;
-  } else {
-    jiggle.velocity *= 0.9;
+  if (model) {
+    rotationVelocity *= 0.92;
+    model.rotation.y += rotationVelocity;
   }
-
-  jiggle.velocity *= jiggle.damping;
-  chest.position.x = jiggle.velocity * 0.1;
-  hips.position.x = jiggle.velocity * 0.07;
-
-  rotationVelocity *= 0.85;
-
   renderer.render(scene, camera);
 }
-animate();
+
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
 </script>
 </body>
 </html>
