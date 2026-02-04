@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bikini Maker Simulator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+<style>
+body {
+  margin: 0;
+  overflow: hidden;
+  font-family: system-ui, -apple-system;
+  background: #f2f2f2;
+}
+
+#ui {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  background: rgba(255,255,255,0.96);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+label {
+  font-size: 13px;
+}
+
+input, select {
+  width: 100%;
+  font-size: 16px;
+  padding: 5px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="ui">
+  <label>
+    <input type="checkbox" id="perfMode"> Performance Mode
+  </label>
+
+  <label>
+    <input type="checkbox" id="jiggleToggle"> Secondary Motion
+  </label>
+
+  <label>Skin Texture</label>
+  <select id="skinType">
+    <option value="dry">Dry</option>
+    <option value="oily">Oily</option>
+    <option value="glossy">Glossy</option>
+    <option value="wet">Wet</option>
+    <option value="rough">Rough</option>
+    <option value="smooth">Smooth</option>
+  </select>
+
+  <label>Chest</label>
+  <input type="range" id="chest" min="0.9" max="1.2" step="0.01" value="1">
+
+  <label>Waist</label>
+  <input type="range" id="waist" min="0.85" max="1.1" step="0.01" value="1">
+
+  <label>Hips</label>
+  <input type="range" id="hips" min="0.9" max="1.25" step="0.01" value="1">
+
+  <label>Shoulders</label>
+  <input type="range" id="shoulders" min="0.9" max="1.15" step="0.01" value="1">
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158/build/three.min.js"></script>
+
+<script>
+/* ---------- SCENE ---------- */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xf2f2f2);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(0, 1.6, 3);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(devicePixelRatio);
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.2));
+
+/* ---------- MODEL (PLACEHOLDER MANNEQUIN) ---------- */
+const skinMaterial = new THREE.MeshStandardMaterial({
+  color: 0xffd1b3,
+  roughness: 0.6,
+  metalness: 0
+});
+
+const body = new THREE.Group();
+scene.add(body);
+
+// Simple mannequin parts (low-end friendly)
+function part(y, sx, sy, sz) {
+  const m = new THREE.Mesh(
+    new THREE.SphereGeometry(0.25, 24, 24),
+    skinMaterial
+  );
+  m.position.y = y;
+  m.scale.set(sx, sy, sz);
+  body.add(m);
+  return m;
+}
+
+const chest = part(1.4, 1, 0.9, 1);
+const waist = part(1.1, 0.9, 0.7, 0.9);
+const hips = part(0.8, 1, 0.8, 1);
+const shoulders = part(1.6, 1.1, 0.4, 1.1);
+
+/* ---------- BODY SLIDERS ---------- */
+const parts = { chest, waist, hips, shoulders };
+
+Object.keys(parts).forEach(p => {
+  document.getElementById(p).addEventListener("input", e => {
+    parts[p].scale.x = e.target.value;
+    parts[p].scale.z = e.target.value;
+  });
+});
+
+/* ---------- SKIN PRESETS ---------- */
+document.getElementById("skinType").addEventListener("change", e => {
+  const s = e.target.value;
+  const map = {
+    dry: { r: 0.85, m: 0 },
+    oily: { r: 0.45, m: 0.1 },
+    glossy: { r: 0.2, m: 0.15 },
+    wet: { r: 0.08, m: 0.25 },
+    rough: { r: 0.95, m: 0 },
+    smooth: { r: 0.3, m: 0.05 }
+  };
+  skinMaterial.roughness = map[s].r;
+  skinMaterial.metalness = map[s].m;
+});
+
+/* ---------- JIGGLE PHYSICS ---------- */
+const jiggle = {
+  enabled: false,
+  strength: 0.06,
+  damping: 0.88,
+  velocity: 0
+};
+
+let isRotating = false;
+let rotationVelocity = 0;
+let prevX = 0;
+
+document.getElementById("jiggleToggle").addEventListener("change", e => {
+  jiggle.enabled = e.target.checked && !perfMode.checked;
+});
+
+/* ---------- TOUCH ROTATION ---------- */
+renderer.domElement.addEventListener("touchstart", e => {
+  isRotating = true;
+  prevX = e.touches[0].clientX;
+});
+
+renderer.domElement.addEventListener("touchmove", e => {
+  if (!isRotating) return;
+  const x = e.touches[0].clientX;
+  const delta = x - prevX;
+  body.rotation.y += delta * 0.005;
+  rotationVelocity = delta * 0.01;
+  prevX = x;
+});
+
+renderer.domElement.addEventListener("touchend", () => {
+  isRotating = false;
+});
+
+/* ---------- PERFORMANCE MODE ---------- */
+const perfMode = document.getElementById("perfMode");
+
+perfMode.addEventListener("change", () => {
+  const low = perfMode.checked;
+  renderer.setPixelRatio(low ? 1 : devicePixelRatio);
+  skinMaterial.flatShading = low;
+  skinMaterial.needsUpdate = true;
+
+  if (low) {
+    jiggle.enabled = false;
+    document.getElementById("jiggleToggle").checked = false;
+  }
+});
+
+if (navigator.deviceMemory && navigator.deviceMemory <= 3) {
+  perfMode.checked = true;
+  perfMode.dispatchEvent(new Event("change"));
+}
+
+/* ---------- LOOP ---------- */
+let last = performance.now();
+function animate(t) {
+  requestAnimationFrame(animate);
+  const dt = Math.min((t - last) / 1000, 0.033);
+  last = t;
+
+  if (jiggle.enabled && isRotating) {
+    jiggle.velocity += rotationVelocity * jiggle.strength;
+  } else {
+    jiggle.velocity *= 0.9;
+  }
+
+  jiggle.velocity *= jiggle.damping;
+  chest.position.x = jiggle.velocity * 0.1;
+  hips.position.x = jiggle.velocity * 0.07;
+
+  rotationVelocity *= 0.85;
+
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
